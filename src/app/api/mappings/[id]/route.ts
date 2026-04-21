@@ -18,7 +18,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!mapping) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   try {
-    const { label, targetUrl, logRetain, isActive } = await req.json();
+   const { label, targetUrl, logRetain, isActive, alwaysReturn200 } = await req.json();
 
     if (targetUrl) {
       try {
@@ -28,7 +28,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       }
     }
 
-    const updated = await prisma.mapping.update({
+   const updated = await prisma.mapping.update({
       where: { id },
       data: {
         ...(label !== undefined && { label }),
@@ -37,6 +37,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           logRetain: Math.max(1, Math.min(100, Number(logRetain))),
         }),
         ...(isActive !== undefined && { isActive: Boolean(isActive) }),
+        ...(alwaysReturn200 !== undefined && { alwaysReturn200: Boolean(alwaysReturn200) }),  // ← add this
       },
     });
 

@@ -16,6 +16,7 @@ export default function MappingModal({ open, onClose, onSaved, editing }: Props)
     label: "",
     targetUrl: "",
     logRetain: "5",
+    alwaysReturn200: false,   // ← add this
   });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -23,13 +24,14 @@ export default function MappingModal({ open, onClose, onSaved, editing }: Props)
   useEffect(() => {
     if (editing) {
       setForm({
-        slug: editing.slug,
-        label: editing.label,
-        targetUrl: editing.targetUrl,
-        logRetain: String(editing.logRetain),
-      });
+      slug: editing.slug,
+      label: editing.label,
+      targetUrl: editing.targetUrl,
+      logRetain: String(editing.logRetain),
+      alwaysReturn200: editing.alwaysReturn200,   // ← add this
+    });
     } else {
-      setForm({ slug: "", label: "", targetUrl: "", logRetain: "5" });
+      setForm({ slug: "", label: "", targetUrl: "", logRetain: "5", alwaysReturn200: false });   // ← add this
     }
     setError("");
   }, [editing, open]);
@@ -43,8 +45,8 @@ export default function MappingModal({ open, onClose, onSaved, editing }: Props)
       const url = editing ? `/api/mappings/${editing.id}` : "/api/mappings";
       const method = editing ? "PUT" : "POST";
       const body = editing
-        ? { label: form.label, targetUrl: form.targetUrl, logRetain: Number(form.logRetain) }
-        : { ...form, logRetain: Number(form.logRetain) };
+      ? { label: form.label, targetUrl: form.targetUrl, logRetain: Number(form.logRetain), alwaysReturn200: form.alwaysReturn200 }
+      : { ...form, logRetain: Number(form.logRetain) };
 
       const res = await fetch(url, {
         method,
@@ -168,6 +170,28 @@ export default function MappingModal({ open, onClose, onSaved, editing }: Props)
               className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition"
             />
           </div>
+
+          <div className="flex items-start justify-between gap-3 p-3 bg-gray-800/60 rounded-lg">
+  <div>
+    <p className="text-sm font-medium text-gray-300">Always return 200</p>
+    <p className="text-xs text-gray-500 mt-0.5">
+      Ignore target response — always reply 200 OK with empty body. Useful when the target is ngrok or has unreliable responses.
+    </p>
+  </div>
+  <button
+    type="button"
+    onClick={() => setForm({ ...form, alwaysReturn200: !form.alwaysReturn200 })}
+    className={`shrink-0 w-10 h-6 rounded-full transition-colors relative ${
+      form.alwaysReturn200 ? "bg-violet-600" : "bg-gray-700"
+    }`}
+  >
+    <span
+      className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
+        form.alwaysReturn200 ? "translate-x-5" : "translate-x-1"
+      }`}
+    />
+  </button>
+</div>
 
           <div className="flex gap-3 pt-1">
             <button

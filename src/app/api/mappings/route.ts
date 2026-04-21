@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const { slug, label, targetUrl, logRetain } = await req.json();
+    const { slug, label, targetUrl, logRetain, alwaysReturn200 } = await req.json();
 
     if (!slug || !label || !targetUrl) {
       return NextResponse.json({ error: "slug, label and targetUrl are required" }, { status: 400 });
@@ -54,14 +54,15 @@ export async function POST(req: NextRequest) {
     }
 
     const mapping = await prisma.mapping.create({
-      data: {
-        slug,
-        label,
-        targetUrl,
-        logRetain: logRetain ? Math.max(1, Math.min(100, Number(logRetain))) : 5,
-        userId: session.userId,
-      },
-    });
+        data: {
+          slug,
+          label,
+          targetUrl,
+          logRetain: logRetain ? Math.max(1, Math.min(100, Number(logRetain))) : 5,
+          alwaysReturn200: Boolean(alwaysReturn200),   // ← add this
+          userId: session.userId,
+        },
+      });
 
     return NextResponse.json({ data: mapping }, { status: 201 });
   } catch (err) {

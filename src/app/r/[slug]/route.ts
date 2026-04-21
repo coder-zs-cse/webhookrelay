@@ -106,7 +106,12 @@ async function handleRelay(req: NextRequest, slug: string): Promise<NextResponse
     }
 
     // Forward the response back to caller
-    const relayResponse = new NextResponse(responseBody, {
+    const relayResponse = mapping.alwaysReturn200
+  ? new NextResponse("Success", {
+      status: 200,
+      headers: { "x-relay-slug": slug, "x-relay-target": mapping.targetUrl },
+    })
+  : new NextResponse(responseBody, {
       status: response.status,
       headers: {
         ...responseHeaders,

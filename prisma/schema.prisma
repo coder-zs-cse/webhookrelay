@@ -28,6 +28,7 @@ model Mapping {
   userId      String
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   logs        RequestLog[]
+  alwaysReturn200 Boolean    @default(false)   // ← add this
 }
 
 model RequestLog {

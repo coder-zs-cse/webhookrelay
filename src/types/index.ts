@@ -19,6 +19,7 @@ export interface Mapping {
   _count?: {
     logs: number;
   };
+  alwaysReturn200: boolean;   // ← add this 
 }
 
 export interface RequestLog {

@@ -68,6 +68,12 @@ export default function MappingCard({ mapping, onEdit, onViewLogs, onToggleActiv
             </span>
           </div>
 
+          {mapping.alwaysReturn200 && (
+            <span className="text-xs px-2 py-0.5 rounded-full border bg-amber-500/10 text-amber-400 border-amber-500/20">
+              200 always
+            </span>
+          )}
+
           {/* Target URL */}
           <p className="text-xs text-gray-500 mt-0.5 font-mono truncate" title={mapping.targetUrl}>
             → {mapping.targetUrl}
