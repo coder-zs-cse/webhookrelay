@@ -1,0 +1,47 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String    @id @default(cuid())
+  email     String    @unique
+  password  String
+  name      String?
+  createdAt DateTime  @default(now())
+  mappings  Mapping[]
+}
+
+model Mapping {
+  id          String       @id @default(cuid())
+  slug        String       @unique
+  label       String
+  targetUrl   String
+  logRetain   Int          @default(5)
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  logs        RequestLog[]
+}
+
+model RequestLog {
+  id          String   @id @default(cuid())
+  mappingId   String
+  mapping     Mapping  @relation(fields: [mappingId], references: [id], onDelete: Cascade)
+  method      String
+  path        String
+  headers     Json
+  body        Json?
+  queryParams Json?
+  statusCode  Int?
+  success     Boolean
+  error       String?
+  duration    Int?
+  createdAt   DateTime @default(now())
+}
