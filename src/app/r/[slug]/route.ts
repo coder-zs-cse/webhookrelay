@@ -204,7 +204,7 @@ async function saveLog(params: {
   });
 
   if (logs.length > params.logRetain) {
-    const toDelete = logs.slice(params.logRetain).map((l) => l.id);
+    const toDelete = logs.slice(params.logRetain).map((l: { id: string }) => l.id);
     await prisma.requestLog.deleteMany({ where: { id: { in: toDelete } } });
   }
 }
