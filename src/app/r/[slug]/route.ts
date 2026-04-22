@@ -49,6 +49,9 @@ async function handleRelay(req: NextRequest, slug: string): Promise<NextResponse
   forwardHeaders["x-forwarded-host"] = incomingUrl.hostname;
   forwardHeaders["x-relay-slug"] = slug;
 
+  forwardHeaders["ngrok-skip-browser-warning"] = "true";
+  forwardHeaders["user-agent"] = "WebhookRelay/1.0";
+  
   // Read request body
   let bodyText: string | null = null;
   let bodyJson: unknown = null;
