@@ -20,7 +20,12 @@ function timeAgo(date: Date | string): string {
   if (m < 60) return `${m}m ago`;
   const h = Math.floor(m / 60);
   if (h < 24) return `${h}h ago`;
-  return new Date(date).toLocaleDateString();
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(date));
 }
 
 export default function MappingCard({ mapping, onEdit, onViewLogs, onToggleActive, onDelete, baseUrl }: Props) {
