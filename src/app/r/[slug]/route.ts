@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { eventBus } from "@/lib/eventBus";
+import { RequestLog } from "@prisma/client";
+import { config } from "@/lib/config";
 
 // Headers we should NOT forward to the target (hop-by-hop headers)
 const HOP_BY_HOP_HEADERS = new Set([
@@ -181,7 +184,7 @@ async function saveLog(params: {
   logRetain: number;
 }) {
   // Insert new log
-  await prisma.requestLog.create({
+  const currentLog: RequestLog = await prisma.requestLog.create({
     data: {
       mappingId: params.mappingId,
       method: params.method,
@@ -195,6 +198,10 @@ async function saveLog(params: {
       duration: params.duration,
     },
   });
+
+  if (config.enableSSE) {
+    eventBus.emit(`webhook:${params.mappingId}`, currentLog);
+  }
 
   // Trim to logRetain limit — keep only the N most recent
   const logs = await prisma.requestLog.findMany({

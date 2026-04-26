@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Mapping, RequestLog } from "@/types";
+import { config } from "@/lib/config";
 
 interface Props {
   mapping: Mapping | null;
@@ -27,7 +28,7 @@ function MethodBadge({ method }: { method: string }) {
   );
 }
 
-function StatusBadge({ code, success }: { code: number | null; success: boolean }) {
+function StatusBadge({ code }: { code: number | null }) {
   if (code === null) {
     return (
       <span className="text-xs px-2 py-0.5 rounded border bg-red-500/15 text-red-400 border-red-500/20">
@@ -61,18 +62,98 @@ function timeAgo(date: Date | string): string {
   return new Date(date).toLocaleDateString();
 }
 
+type SSEStatus = "connecting" | "open" | "reconnecting" | "dead";
+
+function StatusDot({ status }: { status: SSEStatus }) {
+  const config: Record<SSEStatus, { label: string; dotClass: string; pulse: boolean }> = {
+    connecting:   { label: "Connecting...",   dotClass: "bg-yellow-500", pulse: true },
+    open:         { label: "Live",         dotClass: "bg-emerald-500", pulse: true },
+    reconnecting: { label: "Reconnecting...", dotClass: "bg-yellow-500", pulse: true },
+    dead:         { label: "Live trail failed", dotClass: "bg-red-500",    pulse: false },
+  };
+  const { label, dotClass, pulse } = config[status];
+
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs text-gray-400">
+      <span className="relative flex h-2 w-2">
+        {pulse && (
+          <span className={`absolute inline-flex h-full w-full rounded-full ${dotClass} opacity-75 animate-ping`} />
+        )}
+        <span className={`relative inline-flex h-2 w-2 rounded-full ${dotClass}`} />
+      </span>
+      {label}
+    </span>
+  );
+}
+
 export default function LogsDrawer({ mapping, onClose }: Props) {
   const [logs, setLogs] = useState<RequestLog[]>([]);
+  const [status, setStatus] = useState<SSEStatus>("connecting");
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [clearing, setClearing] = useState(false);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [newLogIds, setNewLogIds] = useState<Set<string>>(new Set());
+
+  const retryCount = useRef(0);
+  const retryTimeout = useRef<NodeJS.Timeout | null>(null);
+  const esRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
     if (!mapping) return;
     setLogs([]);
     setExpanded(null);
+    setHoveredId(null);
+    setNewLogIds(new Set());
     fetchLogs();
+    connect();
+
+    return () => {
+      esRef.current?.close();
+      esRef.current = null;
+      if (retryTimeout.current) clearTimeout(retryTimeout.current);
+    };
   }, [mapping?.id]);
+
+  function connect() {
+    if (!mapping) return;
+
+    const es = new EventSource(`/api/mappings/${mapping.id}/logs/stream`);
+    esRef.current = es;
+    setStatus("connecting");
+
+    es.onopen = () => {
+      retryCount.current = 0;
+      setStatus("open");
+    };
+
+    es.addEventListener("request", (event) => {
+      const log = JSON.parse(event.data);
+      setLogs((prev) => [log, ...prev]);
+
+      // mark as new for entrance animation
+      setNewLogIds((prev) => new Set(prev).add(log.id));
+      setTimeout(() => {
+        setNewLogIds((prev) => {
+          const next = new Set(prev);
+          next.delete(log.id);
+          return next;
+        });
+      }, 600);
+    });
+
+    es.onerror = () => {
+      es.close();
+      retryCount.current++;
+      if (retryCount.current <= config.maxSSEClientRetries) {
+        const delay = Math.min(1000 * 2 ** retryCount.current, 30000);
+        setStatus("reconnecting");
+        retryTimeout.current = setTimeout(connect, delay);
+      } else {
+        setStatus("dead");
+      }
+    };
+  }
 
   async function fetchLogs() {
     if (!mapping) return;
@@ -101,13 +182,8 @@ export default function LogsDrawer({ mapping, onClose }: Props) {
 
   return (
     <>
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
-        onClick={onClose}
-      />
+      <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" onClick={onClose} />
 
-      {/* Drawer */}
       <div className="fixed inset-y-0 right-0 z-50 w-full max-w-xl bg-gray-900 border-l border-gray-800 flex flex-col shadow-2xl">
         {/* Header */}
         <div className="flex items-start justify-between px-5 py-4 border-b border-gray-800">
@@ -126,10 +202,7 @@ export default function LogsDrawer({ mapping, onClose }: Props) {
             </div>
             <p className="text-xs text-gray-500 mt-0.5 font-mono truncate">{mapping.targetUrl}</p>
           </div>
-          <button
-            onClick={onClose}
-            className="ml-3 shrink-0 text-gray-500 hover:text-gray-300 transition"
-          >
+          <button onClick={onClose} className="ml-3 shrink-0 text-gray-500 hover:text-gray-300 transition">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -138,10 +211,16 @@ export default function LogsDrawer({ mapping, onClose }: Props) {
 
         {/* Toolbar */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800/50">
-          <p className="text-xs text-gray-500">
-            Last {mapping.logRetain} requests retained
-          </p>
+          <StatusDot status={status} />
           <div className="flex gap-2">
+            {status === "dead" && (
+              <button
+                onClick={() => { retryCount.current = 0; connect(); }}
+                className="text-xs text-blue-400 hover:text-blue-300 transition px-2.5 py-1 rounded-md hover:bg-blue-500/10"
+              >
+                Reconnect
+              </button>
+            )}
             <button
               onClick={fetchLogs}
               className="text-xs text-gray-400 hover:text-gray-200 transition px-2.5 py-1 rounded-md hover:bg-gray-800"
@@ -168,83 +247,142 @@ export default function LogsDrawer({ mapping, onClose }: Props) {
             </div>
           ) : logs.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-48 text-center px-8">
-              <div className="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center mb-3">
-                <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                </svg>
-              </div>
               <p className="text-gray-400 text-sm font-medium">No requests yet</p>
               <p className="text-gray-600 text-xs mt-1">
                 Requests to <span className="font-mono text-gray-500">/r/{mapping.slug}</span> will appear here
               </p>
             </div>
           ) : (
-            <ul className="divide-y divide-gray-800/50">
-              {logs.map((log) => (
-                <li key={log.id} className="px-5 py-3">
-                  <button
-                    className="w-full text-left"
-                    onClick={() => setExpanded(expanded === log.id ? null : log.id)}
+            <ul className="log-list px-3 py-2 space-y-1">
+              {logs.map((log) => {
+                const isHovered = hoveredId === log.id;
+                const isExpanded = expanded === log.id;
+                const isNew = newLogIds.has(log.id);
+
+                return (
+                  <li
+                    key={log.id}
+                    className={`log-item ${isNew ? "log-enter" : ""}`}
+                    onMouseEnter={() => setHoveredId(log.id)}
+                    /* no onMouseLeave — hover sticks until cursor enters another item */
                   >
-                    <div className="flex items-center gap-2">
-                      <MethodBadge method={log.method} />
-                      <StatusBadge code={log.statusCode} success={log.success} />
-                      <span className="text-sm text-gray-300 font-mono truncate flex-1">
-                        {log.path || "/"}
-                      </span>
-                      <span className="text-xs text-gray-500 shrink-0">
-                        {log.duration != null ? `${log.duration}ms` : ""}
-                      </span>
-                      <span className="text-xs text-gray-600 shrink-0">
-                        {timeAgo(log.createdAt)}
-                      </span>
-                    </div>
-                    {log.error && (
-                      <p className="mt-1.5 text-xs text-red-400 font-mono truncate">
-                        ✗ {log.error}
-                      </p>
-                    )}
-                  </button>
-
-                  {expanded === log.id && (
-                    <div className="mt-3 space-y-3">
-                      {/* Query Params */}
-                      {log.queryParams && Object.keys(log.queryParams).length > 0 && (
-                        <div>
-                          <p className="text-xs font-medium text-gray-500 mb-1">Query Params</p>
-                          <pre className="text-xs bg-gray-800 rounded-lg p-3 text-gray-300 overflow-x-auto font-mono">
-                            {JSON.stringify(log.queryParams, null, 2)}
-                          </pre>
-                        </div>
-                      )}
-
-                      {/* Headers */}
-                      <div>
-                        <p className="text-xs font-medium text-gray-500 mb-1">Headers</p>
-                        <pre className="text-xs bg-gray-800 rounded-lg p-3 text-gray-300 overflow-x-auto font-mono max-h-40">
-                          {JSON.stringify(log.headers, null, 2)}
-                        </pre>
+                    <button
+                      className={`log-card w-full text-left rounded-lg border px-3 py-2.5 transition-all duration-200 ${
+                        isExpanded
+                          ? "border-blue-500/40 bg-blue-500/8 shadow-[0_0_20px_rgba(59,130,246,0.12)]"
+                          : isHovered
+                          ? "border-gray-600/60 bg-gray-800/50 -translate-y-[2px] shadow-[0_8px_24px_rgba(0,0,0,0.4),0_0_0_1px_rgba(148,163,184,0.08)]"
+                          : "border-transparent bg-transparent"
+                      }`}
+                      onClick={() => setExpanded(isExpanded ? null : log.id)}
+                    >
+                      <div className="flex items-center gap-2">
+                        <MethodBadge method={log.method} />
+                        <StatusBadge code={log.statusCode} />
+                        <span className="text-sm text-gray-300 font-mono truncate flex-1">
+                          {log.path || "/"}
+                        </span>
+                        <span className="text-xs text-gray-500 shrink-0">
+                          {log.duration != null ? `${log.duration}ms` : ""}
+                        </span>
+                        <span className="text-xs text-gray-600 shrink-0">
+                          {timeAgo(log.createdAt)}
+                        </span>
+                        <svg
+                          className={`w-3.5 h-3.5 text-gray-600 transition-transform duration-200 shrink-0 ${
+                            isExpanded ? "rotate-180" : ""
+                          }`}
+                          fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
                       </div>
+                      {log.error && (
+                        <p className="mt-1.5 text-xs text-red-400 font-mono truncate">✗ {log.error}</p>
+                      )}
+                    </button>
 
-                      {/* Body */}
-                      {log.body != null && (
+                    <div
+                      className={`overflow-hidden transition-all duration-250 ease-in-out ${
+                        isExpanded ? "max-h-[600px] opacity-100 mt-2" : "max-h-0 opacity-0"
+                      }`}
+                    >
+                      <div className="space-y-3 px-3 pb-2">
+                        {log.queryParams && Object.keys(log.queryParams).length > 0 && (
+                          <div>
+                            <p className="text-xs font-medium text-gray-500 mb-1">Query Params</p>
+                            <pre className="text-xs bg-gray-800/80 rounded-lg p-3 text-gray-300 overflow-x-auto font-mono border border-gray-700/30">
+                              {JSON.stringify(log.queryParams, null, 2)}
+                            </pre>
+                          </div>
+                        )}
                         <div>
-                          <p className="text-xs font-medium text-gray-500 mb-1">Body</p>
-                          <pre className="text-xs bg-gray-800 rounded-lg p-3 text-gray-300 overflow-x-auto font-mono max-h-48">
-                            {typeof log.body === "string"
-                              ? log.body
-                              : JSON.stringify(log.body, null, 2)}
+                          <p className="text-xs font-medium text-gray-500 mb-1">Headers</p>
+                          <pre className="text-xs bg-gray-800/80 rounded-lg p-3 text-gray-300 overflow-x-auto font-mono max-h-40 border border-gray-700/30">
+                            {JSON.stringify(log.headers, null, 2)}
                           </pre>
                         </div>
-                      )}
+                        {log.body != null && (
+                          <div>
+                            <p className="text-xs font-medium text-gray-500 mb-1">Body</p>
+                            <pre className="text-xs bg-gray-800/80 rounded-lg p-3 text-gray-300 overflow-x-auto font-mono max-h-48 border border-gray-700/30">
+                              {typeof log.body === "string" ? log.body : JSON.stringify(log.body, null, 2)}
+                            </pre>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  )}
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
       </div>
+
+      <style jsx>{`
+        /* new request slides in from top and pushes everything down */
+        @keyframes logSlideIn {
+          0% {
+            opacity: 0;
+            transform: translateY(-100%) scaleY(0.95);
+            max-height: 0;
+          }
+          40% {
+            opacity: 0;
+            max-height: 80px;
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0) scaleY(1);
+            max-height: 80px;
+          }
+        }
+
+        /* existing items slide down smoothly when a new one enters */
+        .log-list {
+          /* this makes existing items animate their position change */
+        }
+
+        .log-item {
+          transform-origin: top center;
+          /* smooth position transitions when items shift down */
+          transition: transform 0.3s cubic-bezier(0.2, 0, 0, 1);
+        }
+
+        .log-enter {
+          animation: logSlideIn 450ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        /* the card glow on hover */
+        .log-card {
+          transition:
+            border-color 0.2s ease,
+            background-color 0.2s ease,
+            transform 0.2s cubic-bezier(0.2, 0, 0, 1),
+            box-shadow 0.3s ease;
+        }
+      `}</style>
     </>
   );
 }
