@@ -60,5 +60,6 @@ RUN apt-get update -qq && \
 
 COPY --from=build /app /app
 
+ENV PORT=8080
 EXPOSE 8080
 CMD [ "pnpm", "run", "start" ]
