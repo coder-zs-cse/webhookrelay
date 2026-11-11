@@ -1,58 +1,64 @@
 # syntax = docker/dockerfile:1
 
-# Adjust NODE_VERSION as desired
 ARG NODE_VERSION=22.21.1
 FROM node:${NODE_VERSION}-slim AS base
 
 LABEL fly_launch_runtime="Next.js/Prisma"
 
-# Next.js/Prisma app lives here
 WORKDIR /app
 
-# Set production environment
 ENV NODE_ENV="production"
 
-# Install pnpm
-ARG PNPM_VERSION=latest
+# Pin the pnpm 10 line. `latest` now fails the image build on unapproved
+# dependency scripts (ERR_PNPM_IGNORED_BUILDS).
+ARG PNPM_VERSION=10
 RUN npm install -g pnpm@$PNPM_VERSION
 
 
-# Throw-away build stage to reduce size of final image
 FROM base AS build
 
-# Install packages needed to build node modules
-RUN apt-get update -qq && \
-    apt-get install --no-install-recommends -y build-essential node-gyp openssl pkg-config python-is-python3
-
-# Install node modules
-COPY package.json pnpm-lock.yaml ./
-COPY prisma .
-RUN pnpm install --frozen-lockfile --prod=false
-
-# Generate Prisma Client
-RUN npx prisma generate
-
-# Copy application code
-COPY . .
-
-# Build application
-RUN pnpm run build
-
-# Remove development dependencies
-RUN pnpm prune --prod
-
-
-# Final stage for app image
-FROM base
-
-# Install packages needed for deployment
 RUN apt-get update -qq && \
     apt-get install --no-install-recommends -y openssl && \
     rm -rf /var/lib/apt/lists /var/cache/apt/archives
 
-# Copy built application
+COPY package.json pnpm-lock.yaml ./
+
+# prisma generate only needs the env var to exist. The real URL is a runtime secret.
+ENV DATABASE_URL="postgresql://build:build@localhost:5432/webhookrelay"
+
+# Approve the install scripts pnpm 10 blocks by default. esbuild is required
+# by `tsx` at startup; Prisma needs its engine download.
+RUN printf '%s\n' \
+      'onlyBuiltDependencies:' \
+      '  - "@prisma/client"' \
+      '  - "@prisma/engines"' \
+      '  - esbuild' \
+      '  - prisma' \
+      '  - sharp' \
+      '  - unrs-resolver' \
+      > pnpm-workspace.yaml
+
+RUN pnpm install --frozen-lockfile --prod=false
+
+COPY . .
+
+# Next inlines this at build time. Pass it as a Fly build arg.
+ARG NEXT_PUBLIC_BASE_URL
+ENV NEXT_PUBLIC_BASE_URL=${NEXT_PUBLIC_BASE_URL}
+
+RUN pnpm run build
+
+# Keep devDependencies. `prisma` is one of them, and Fly's release command
+# runs `npx prisma migrate deploy` in this image.
+
+
+FROM base
+
+RUN apt-get update -qq && \
+    apt-get install --no-install-recommends -y openssl && \
+    rm -rf /var/lib/apt/lists /var/cache/apt/archives
+
 COPY --from=build /app /app
 
-# Start the server by default, this can be overwritten at runtime
-EXPOSE 3000
+EXPOSE 8080
 CMD [ "pnpm", "run", "start" ]
