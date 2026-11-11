@@ -6,7 +6,8 @@
 app = 'webhookrelay'
 primary_region = 'ams'
 
-[build]
+[build.args]
+  NEXT_PUBLIC_BASE_URL = "https://webhookrelay.fly.dev"
 [deploy]
   release_command = 'npx prisma migrate deploy'
 
