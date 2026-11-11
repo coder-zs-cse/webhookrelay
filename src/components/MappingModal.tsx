@@ -204,8 +204,8 @@ export default function MappingModal({ open, onClose, onSaved, editing }: Props)
               }`}
             >
               <span
-                className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
-                  form.isWebSocket ? "translate-x-5" : "translate-x-1"
+                className={`absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition-transform ${
+                  form.isWebSocket ? "translate-x-4" : "translate-x-0"
                 }`}
               />
             </button>
@@ -227,8 +227,8 @@ export default function MappingModal({ open, onClose, onSaved, editing }: Props)
     }`}
   >
     <span
-      className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
-        form.alwaysReturn200 ? "translate-x-5" : "translate-x-1"
+      className={`absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition-transform ${
+        form.alwaysReturn200 ? "translate-x-4" : "translate-x-0"
       }`}
     />
   </button>
