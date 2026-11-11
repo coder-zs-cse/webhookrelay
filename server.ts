@@ -123,7 +123,7 @@ async function main() {
   }
 
   server.listen(port, "0.0.0.0", () => {
-    console.log(`WebhookRelay ${dev ? "dev" : "prod"} on http://localhost:${port} (ws upgrades on /r/:slug)`);
+    console.log(`WebhookRelay ${dev ? "dev" : "prod"} on http://0.0.0.0:${port} (ws upgrades on /r/:slug)`);
   });
 }
 

@@ -60,5 +60,7 @@ RUN apt-get update -qq && \
 
 COPY --from=build /app /app
 
+# fly.toml checks 0.0.0.0:8080. Fly does not always inject PORT for a Dockerfile app.
+ENV PORT=8080
 EXPOSE 8080
 CMD [ "pnpm", "run", "start" ]
