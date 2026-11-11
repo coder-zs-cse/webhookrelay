@@ -43,8 +43,7 @@ RUN pnpm install --frozen-lockfile --prod=false
 COPY . .
 
 # Next inlines this at build time. Pass it as a Fly build arg.
-ARG NEXT_PUBLIC_BASE_URL
-ENV NEXT_PUBLIC_BASE_URL=${NEXT_PUBLIC_BASE_URL}
+ENV NEXT_PUBLIC_BASE_URL=https://webhookrelay.fly.dev/
 
 RUN pnpm run build
 
