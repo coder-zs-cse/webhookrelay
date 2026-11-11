@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { toUpstreamWebSocketUrl } from "@/lib/wsTarget";
 
 async function getOwnedMapping(mappingId: string, userId: string) {
   const mapping = await prisma.mapping.findUnique({ where: { id: mappingId } });
@@ -18,13 +19,24 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!mapping) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   try {
-   const { label, targetUrl, logRetain, isActive, alwaysReturn200 } = await req.json();
+   const { label, targetUrl, logRetain, isActive, alwaysReturn200, isWebSocket } = await req.json();
 
     if (targetUrl) {
       try {
         new URL(targetUrl);
       } catch {
         return NextResponse.json({ error: "targetUrl must be a valid URL" }, { status: 400 });
+      }
+    }
+
+    const nextIsWebSocket = isWebSocket !== undefined ? Boolean(isWebSocket) : mapping.isWebSocket;
+    const nextTarget = targetUrl !== undefined ? targetUrl : mapping.targetUrl;
+    if (nextIsWebSocket) {
+      try {
+        toUpstreamWebSocketUrl(nextTarget, "");
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Invalid WebSocket target";
+        return NextResponse.json({ error: message }, { status: 400 });
       }
     }
 
@@ -38,6 +50,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         }),
         ...(isActive !== undefined && { isActive: Boolean(isActive) }),
         ...(alwaysReturn200 !== undefined && { alwaysReturn200: Boolean(alwaysReturn200) }),  // ← add this
+        ...(isWebSocket !== undefined && { isWebSocket: Boolean(isWebSocket) }),
       },
     });
 

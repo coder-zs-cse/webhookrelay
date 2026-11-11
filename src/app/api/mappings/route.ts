@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { toUpstreamWebSocketUrl } from "@/lib/wsTarget";
 
 export async function GET() {
   const session = await getSession();
@@ -27,7 +28,7 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const { slug, label, targetUrl, logRetain, alwaysReturn200 } = await req.json();
+    const { slug, label, targetUrl, logRetain, alwaysReturn200, isWebSocket } = await req.json();
 
     if (!slug || !label || !targetUrl) {
       return NextResponse.json({ error: "slug, label and targetUrl are required" }, { status: 400 });
@@ -48,6 +49,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "targetUrl must be a valid URL" }, { status: 400 });
     }
 
+    if (isWebSocket) {
+      try {
+        toUpstreamWebSocketUrl(targetUrl, "");
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Invalid WebSocket target";
+        return NextResponse.json({ error: message }, { status: 400 });
+      }
+    }
+
     const existing = await prisma.mapping.findUnique({ where: { slug } });
     if (existing) {
       return NextResponse.json({ error: "Slug already taken" }, { status: 409 });
@@ -60,6 +70,7 @@ export async function POST(req: NextRequest) {
           targetUrl,
           logRetain: logRetain ? Math.max(1, Math.min(100, Number(logRetain))) : 5,
           alwaysReturn200: Boolean(alwaysReturn200),   // ← add this
+          isWebSocket: Boolean(isWebSocket),
           userId: session.userId,
         },
       });

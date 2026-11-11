@@ -19,7 +19,8 @@ export interface Mapping {
   _count?: {
     logs: number;
   };
-  alwaysReturn200: boolean;   // ← add this 
+  alwaysReturn200: boolean;   // ← add this
+  isWebSocket: boolean;
 }
 
 export interface RequestLog {

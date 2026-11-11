@@ -17,6 +17,7 @@ export default function MappingModal({ open, onClose, onSaved, editing }: Props)
     targetUrl: "",
     logRetain: "5",
     alwaysReturn200: false,   // ← add this
+    isWebSocket: false,
   });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -29,9 +30,10 @@ export default function MappingModal({ open, onClose, onSaved, editing }: Props)
       targetUrl: editing.targetUrl,
       logRetain: String(editing.logRetain),
       alwaysReturn200: editing.alwaysReturn200,   // ← add this
+      isWebSocket: editing.isWebSocket,
     });
     } else {
-      setForm({ slug: "", label: "", targetUrl: "", logRetain: "5", alwaysReturn200: false });   // ← add this
+      setForm({ slug: "", label: "", targetUrl: "", logRetain: "5", alwaysReturn200: false, isWebSocket: false });
     }
     setError("");
   }, [editing, open]);
@@ -45,8 +47,18 @@ export default function MappingModal({ open, onClose, onSaved, editing }: Props)
       const url = editing ? `/api/mappings/${editing.id}` : "/api/mappings";
       const method = editing ? "PUT" : "POST";
       const body = editing
-      ? { label: form.label, targetUrl: form.targetUrl, logRetain: Number(form.logRetain), alwaysReturn200: form.alwaysReturn200 }
-      : { ...form, logRetain: Number(form.logRetain) };
+      ? {
+          label: form.label,
+          targetUrl: form.targetUrl,
+          logRetain: Number(form.logRetain),
+          alwaysReturn200: form.isWebSocket ? false : form.alwaysReturn200,
+          isWebSocket: form.isWebSocket,
+        }
+      : {
+          ...form,
+          logRetain: Number(form.logRetain),
+          alwaysReturn200: form.isWebSocket ? false : form.alwaysReturn200,
+        };
 
       const res = await fetch(url, {
         method,
@@ -151,7 +163,7 @@ export default function MappingModal({ open, onClose, onSaved, editing }: Props)
               value={form.targetUrl}
               onChange={(e) => setForm({ ...form, targetUrl: e.target.value })}
               className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition font-mono"
-              placeholder="http://localhost:3000/api/webhook"
+              placeholder={form.isWebSocket ? "https://tunnel.example/ozonetel/audiostream" : "http://localhost:3000/api/webhook"}
             />
           </div>
 
@@ -171,6 +183,35 @@ export default function MappingModal({ open, onClose, onSaved, editing }: Props)
             />
           </div>
 
+          <div className="flex items-start justify-between gap-3 p-3 bg-gray-800/60 rounded-lg">
+            <div>
+              <p className="text-sm font-medium text-gray-300">WebSocket</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Proxy the socket both ways. Public URL is wss://…/r/&lt;slug&gt;. Target can be https:// or wss://; the query string is forwarded.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() =>
+                setForm({
+                  ...form,
+                  isWebSocket: !form.isWebSocket,
+                  alwaysReturn200: !form.isWebSocket ? false : form.alwaysReturn200,
+                })
+              }
+              className={`shrink-0 w-10 h-6 rounded-full transition-colors relative ${
+                form.isWebSocket ? "bg-violet-600" : "bg-gray-700"
+              }`}
+            >
+              <span
+                className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
+                  form.isWebSocket ? "translate-x-5" : "translate-x-1"
+                }`}
+              />
+            </button>
+          </div>
+
+          {!form.isWebSocket && (
           <div className="flex items-start justify-between gap-3 p-3 bg-gray-800/60 rounded-lg">
   <div>
     <p className="text-sm font-medium text-gray-300">Always return 200</p>
@@ -192,6 +233,7 @@ export default function MappingModal({ open, onClose, onSaved, editing }: Props)
     />
   </button>
 </div>
+          )}
 
           <div className="flex gap-3 pt-1">
             <button

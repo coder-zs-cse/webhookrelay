@@ -29,6 +29,7 @@ model Mapping {
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   logs        RequestLog[]
   alwaysReturn200 Boolean    @default(false)   // ← add this
+  isWebSocket     Boolean    @default(false)
 }
 
 model RequestLog {

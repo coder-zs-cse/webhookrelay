@@ -33,7 +33,10 @@ export default function MappingCard({ mapping, onEdit, onViewLogs, onToggleActiv
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  const productionUrl = `${baseUrl}/r/${mapping.slug}`;
+  const httpUrl = `${baseUrl}/r/${mapping.slug}`;
+  const productionUrl = mapping.isWebSocket
+    ? httpUrl.replace(/^https:/, "wss:").replace(/^http:/, "ws:")
+    : httpUrl;
 
   async function copyUrl() {
     await navigator.clipboard.writeText(productionUrl);
@@ -72,6 +75,12 @@ export default function MappingCard({ mapping, onEdit, onViewLogs, onToggleActiv
               {mapping.isActive ? "active" : "paused"}
             </span>
           </div>
+
+          {mapping.isWebSocket && (
+            <span className="text-xs px-2 py-0.5 rounded-full border bg-sky-500/10 text-sky-300 border-sky-500/20">
+              websocket
+            </span>
+          )}
 
           {mapping.alwaysReturn200 && (
             <span className="text-xs px-2 py-0.5 rounded-full border bg-amber-500/10 text-amber-400 border-amber-500/20">
@@ -139,7 +148,7 @@ export default function MappingCard({ mapping, onEdit, onViewLogs, onToggleActiv
 
       {/* Production URL row */}
       <div className="mt-3 flex items-center gap-2 bg-gray-800/60 rounded-lg px-3 py-2">
-        <span className="text-xs text-gray-500 shrink-0">URL</span>
+        <span className="text-xs text-gray-500 shrink-0">{mapping.isWebSocket ? "WSS" : "URL"}</span>
         <code className="flex-1 text-xs text-violet-300 font-mono truncate" title={productionUrl}>
           {productionUrl}
         </code>
