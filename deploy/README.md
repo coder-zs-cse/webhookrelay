@@ -1,6 +1,6 @@
 # Deploying to AWS (cheapest option)
 
-One **Lightsail** instance runs everything with Docker Compose: Caddy (automatic HTTPS), the app, and Postgres.
+One **Lightsail** instance runs Caddy (automatic HTTPS) and the app with Docker Compose. Postgres lives on Neon, so it is not part of the stack.
 
 ## Why this shape
 
@@ -8,18 +8,18 @@ WebhookRelay needs a single long-lived Node process: WebSocket relaying holds co
 
 | Option | Approx. monthly cost | Verdict |
 |---|---|---|
-| **Lightsail 1 GB + Postgres in Docker** | **~$7** (IPv4, disk and transfer included) | Chosen |
+| **Lightsail 1 GB + Neon (free)** | **~$7** (IPv4, disk and transfer included) | Chosen |
 | EC2 `t4g.micro` + EBS + public IPv4 | ~$10 | Same box, more line items |
-| App Runner + RDS | ~$20+ | Managed, but RDS alone costs more than the whole Lightsail box |
-| ECS Fargate + ALB + RDS | ~$40+ | The ALB alone is ~$16 |
+| App Runner + Neon | ~$5-15 | Works, but billed for provisioned memory around the clock, and you still need a second tool for HTTPS and domain setup you get free here |
+| ECS Fargate + ALB | ~$25+ | The ALB alone is ~$16 |
 
 Prices are approximate. Check the Lightsail pricing page before you commit.
 
-Trade-off: you own Postgres backups (see the end).
+Memory: with Postgres gone, the $5 / 512 MB plan can run the app, but the Next build is tight even with swap. The 1 GB plan is the safe choice, and you can drop to $5 later if you build elsewhere.
 
 ## One-time setup
 
-1. **Lightsail**: create an instance, Linux/Unix, "OS only" Ubuntu 24.04, the **$7 / 1 GB** plan (512 MB is too tight for Next + Postgres + the build). Open ports 80 and 443 in its Networking tab. Allow SSH only from your IP.
+1. **Lightsail**: create an instance, Linux/Unix, "OS only" Ubuntu 24.04, the **$7 / 1 GB** plan (512 MB is too tight for the Next build). Open ports 80 and 443 in its Networking tab. Allow SSH only from your IP.
 2. **Static IP**: Networking tab, create a static IP and attach it (free while attached).
 3. **DNS**: point an `A` record for your hostname at that IP. No domain yet? Use `<ip-with-dashes>.sslip.io`, which resolves to the IP for free.
 4. **SSH in** and install Docker plus a swap file (the Next build needs the headroom):
@@ -39,8 +39,7 @@ Trade-off: you own Postgres backups (see the end).
 ```bash
 git clone <your-repo> webhookrelay && cd webhookrelay/deploy
 cp .env.example .env
-# edit .env: set DOMAIN, then fill the two secrets:
-#   openssl rand -hex 24   -> POSTGRES_PASSWORD
+# edit .env: set DOMAIN and DATABASE_URL (Neon direct string), then:
 #   openssl rand -hex 32   -> JWT_SECRET
 docker compose up -d --build
 docker compose logs -f app
@@ -54,12 +53,8 @@ Migrations run automatically on every start. Then open `https://<your DOMAIN>/re
 git pull && docker compose up -d --build
 ```
 
-## Backups
+## Neon notes
 
-Webhook logs are capped per endpoint, so the data worth keeping is small (users and endpoint mappings). A manual dump:
-
-```bash
-docker compose exec -T db pg_dump -U webhookrelay webhookrelay | gzip > backup-$(date +%F).sql.gz
-```
-
-For automatic safety, turn on Lightsail automatic snapshots (about $0.05 per GB-month of the 40 GB disk), or cron the dump above and copy it to S3.
+- **Region**: create the Neon project in the AWS region closest to your Lightsail instance. Every relayed request does several queries (insert log, list, prune), so latency adds up.
+- **Cold starts**: the free tier suspends compute after about 5 idle minutes, so the first webhook after a quiet spell pays a short wake-up delay. If a sender has a tight timeout, enable the "always return 200" option on that endpoint or upgrade the Neon plan.
+- **Backups**: Neon keeps point-in-time history on its side, so you have nothing to run here.

@@ -1,4 +1,4 @@
-# Single-host stack: Caddy (TLS) -> app (Next + WebSocket/SSE) -> Postgres.
+# Single-host stack: Caddy (TLS) -> app (Next + WebSocket/SSE). Postgres is external (Neon).
 # Run from this directory:  docker compose up -d --build
 # Config comes from deploy/.env (copy .env.example).
 
@@ -19,30 +19,11 @@ services:
     restart: unless-stopped
     logging: *logging
     environment:
-      DATABASE_URL: postgresql://webhookrelay:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}@db:5432/webhookrelay
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in deploy/.env}
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in deploy/.env}
       PORT: "3000"
     # One instance only, so there is no migration race.
     command: sh -c "npx prisma migrate deploy && exec pnpm run start"
-    depends_on:
-      db:
-        condition: service_healthy
-
-  db:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    logging: *logging
-    environment:
-      POSTGRES_USER: webhookrelay
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: webhookrelay
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U webhookrelay"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
 
   caddy:
     image: caddy:2-alpine
@@ -62,6 +43,5 @@ services:
       - app
 
 volumes:
-  pgdata:
   caddy_data:
   caddy_config:
