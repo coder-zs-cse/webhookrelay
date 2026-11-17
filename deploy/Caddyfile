@@ -1,0 +1,7 @@
+{$DOMAIN} {
+	# WebSocket upgrades work out of the box. flush_interval -1 makes the
+	# live-trail SSE stream flush every event immediately instead of buffering.
+	reverse_proxy app:3000 {
+		flush_interval -1
+	}
+}
