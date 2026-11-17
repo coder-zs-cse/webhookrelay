@@ -99,7 +99,7 @@ pnpm start        # production server
 
 Live trail and WebSocket relaying need one long-lived Node process, so serverless platforms (Vercel, Lambda) will not work. Any host that runs a container does.
 
-The cheapest AWS setup is a single Lightsail instance running everything via Docker Compose. See [deploy/README.md](deploy/README.md) for the step-by-step guide.
+The recommended setup is a single always-on VM (Oracle Cloud Always Free) running the app and Caddy via Docker Compose, with Postgres on Neon. See [deploy/README.md](deploy/README.md) for the step-by-step guide.
 
 For any other host, build the root `Dockerfile` (pass `NEXT_PUBLIC_BASE_URL` as a build arg) and provide `DATABASE_URL`, `JWT_SECRET` and `PORT` at runtime. Run `npx prisma migrate deploy` before starting.
 
